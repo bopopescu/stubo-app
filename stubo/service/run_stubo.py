@@ -21,6 +21,7 @@ from stubo.utils.command_queue import InternalCommandQueue
 from stubo.utils.stats import StatsdStats
 from stubo import version, static_path 
 from stubo.model.db import default_env, coerce_mongo_param
+from mongoengine import connect
 
 log = logging.getLogger(__name__)
         
@@ -95,8 +96,22 @@ class TornadoManager(object):
             log.critical('Unable to connect to mongo, exiting ...')
             sys.exit(1)
         log.info('mongo server_info: {0}'.format(
-                            mongo_client.connection.server_info()))    
-        slave, master = start_redis(self.cfg) 
+                            mongo_client.connection.server_info()))
+
+        # initiating mongoengine connection
+        for i in range(retry_count):
+            try:
+                connect(dbenv['db'], host=dbenv['host'], port=dbenv['port'])
+                break
+            except KeyError as e:
+                log.warn('MongoDB connection parameter is missing: %s' % e)
+            except Exception as e:
+                log.warn(e)
+                log.warn('mongo not available, try again in {0} '
+                        'secs'.format(retry_interval))
+                time.sleep(retry_interval)
+
+        slave, master = start_redis(self.cfg)
         self.cfg['is_cluster'] = False
         if slave != master:
             log.info('redis master is not the same as the slave')
