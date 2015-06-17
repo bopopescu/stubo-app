@@ -1,7 +1,6 @@
 from mongoengine import *
 import logging
-import hashlib
-import json
+from stubo.model.stub import Stub
 
 log = logging.getLogger(__name__)
 
@@ -131,81 +130,69 @@ class Scenario(Document):
         log.debug(msg)
 
     def insert_stub(self, doc, stateful):
-        from stubo.model.stub import Stub
-        matchers = doc['stub'].contains_matchers()
-        scenario = doc['scenario']
+        """
+        Checks whether the stub doesn't exist in database and inserts it. If it does and stateful mode is set to True -
+        updates current stub
+        :param doc: Dictionary containing Stub object and scenario name
+        :param stateful: True or False value to specify whether to update stub or not
+        :return: message with status
+        """
+        # Getting matchers for current stub
+        matchers = doc['stub'].contains_matchers()[0]
 
-        stubs_cursor = self.get_stubs(scenario)
-        if stubs_cursor.count():
-            for stub in stubs_cursor:
-                the_stub = Stub(stub['stub'], scenario)
-                if matchers and matchers == the_stub.contains_matchers():
-                    if not stateful and \
-                                    doc['stub'].response_body() == the_stub.response_body():
-                        msg = 'duplicate stub found, not inserting.'
-                        log.warn(msg)
-                        return msg
-                    log.debug('In scenario: {0} found exact match for matchers:'
-                              ' {1}. Perform stateful update of stub.'.format(scenario,
-                                                                              matchers))
-                    response = the_stub.response_body()
-                    response.extend(doc['stub'].response_body())
-                    the_stub.set_response_body(response)
-                    self.db.scenario_stub.update(
-                        {'_id': ObjectId(stub['_id'])},
-                        {'$set' : {'stub' : the_stub.payload}})
-                    return 'updated with stateful response'
-        doc['stub'] = doc['stub'].payload
-        status = self.db.scenario_stub.insert(doc)
-        return 'inserted scenario_stub: {0}'.format(status)
+        # Getting Stubs for this Scenario with exact body pattern match
+        matched_stub = ScenarioStub.objects(Q(scenario=self.name) &
+                                            Q(matcher=matchers))
+        # If there are matched stubs - check response body
+        if matched_stub:
+            # Q complex query returns a list, we only need one (and only) member
+            matched_stub = matched_stub[0]
+            the_stub = Stub(matched_stub['stub'], self.name)
+
+            # Check whether stateful insert or not and whether response body matches
+            if not stateful and the_stub.response_body() == matched_stub.response_body():
+                msg = 'Duplicate stub found, not inserting.'
+                log.warn(msg)
+                return msg
+
+            # 'stateful' True so extending response body
+            log.debug('In scenario: {0} found exact match for matcher:'
+                      ' {1}. Performing stateful update of stub.'.format(self.name, matchers))
+            response = the_stub.response_body()
+            response.extend(doc['stub'].response_body())
+            the_stub.set_response_body(response)
+            # Assigning new payload
+            matched_stub['stub'] = the_stub.payload
+            # Saving stub
+            matched_stub.save()
+            return 'updated with stateful response'
+        else:
+            # If no matches found - insert a new stub
+            stub_obj = ScenarioStub(scenario=self.name, stub=doc['stub'].payload,
+                                    matcher=matchers)
+            stub_obj.save()
+            return 'inserted scenario_stub: {0}'.format(stub_obj)
 
 
 class ScenarioStub(Document):
     scenario = StringField(required=True)
     stub = DynamicField()
-    stub_hash = StringField(default=None)
+    matcher = StringField(default=None)
 
     meta = {
         'indexes': [
-            {'fields': ['scenario',
-                        'stub_hash']}
+            {'fields': ['scenario', 'matcher']}
         ],
         'ordering': ['+stub.recorded']
     }
 
     def __unicode__(self):
-        return self.stub_hash
-
-    def create_hash(self):
-        """
-        Creates a hash for dictionary (stub payload)
-        :return: hash or None if it fails
-        """
-        try:
-            stub_hash = hashlib.md5(json.dumps(self.stub, sort_keys=True)).hexdigest()
-            self.stub_hash = stub_hash
-            self.save()
-            return stub_hash
-        except Exception as e:
-            log.warn("Failed to create stub hash: %s" % e)
-            return None
-
-    def get_hash(self):
-        """
-        Gets hash for current stub. If it doesn't exist - creates new one and returns. For new hash creation (after stub
-        update) use create_hash() method.
-        :return: md5 hash value of the stub, returns None if hash creation failed
-        """
-        if self.stub_hash is not None:
-            return self.stub_hash
-        else:
-            return self.create_hash()
+        return self.scenario or u''
 
 
 class PreScenarioStub(Document):
     scenario = StringField(required=True)
     stub = DynamicField()
-    fingerprint = StringField(default=None)
 
     meta = {
         'indexes': [
