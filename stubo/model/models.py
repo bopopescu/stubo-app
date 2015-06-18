@@ -177,6 +177,7 @@ class Scenario(Document):
 class ScenarioStub(Document):
     scenario = StringField(required=True)
     stub = DynamicField()
+    # Matcher is used to quickly identify existing stubs during recording
     matcher = StringField(default=None)
 
     meta = {
