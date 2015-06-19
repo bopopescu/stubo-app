@@ -1,3 +1,8 @@
+"""
+    :copyright: (c) 2015 by OpenCredo.
+    :license: GPLv3, see LICENSE for more details.
+"""
+
 from mongoengine import *
 import logging
 from stubo.model.stub import Stub
