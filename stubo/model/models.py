@@ -174,6 +174,56 @@ class Scenario(Document):
             return 'inserted scenario_stub: {0}'.format(stub_obj)
 
 
+class Stub(Document):
+    scenario = StringField(required=True)
+    priority = IntField(default=None)
+    recorded = StringField(default=None)
+
+    # request - urlPath
+    request_path = StringField(default=None)
+    request_query_args = StringField(default=None)
+    # previously stored in ScenarioStub.stub.request.bodyPatterns.contains
+    contains_matchers = ListField(StringField(default=None))
+    # previously stored in ScenarioStub.stub.request.bodyPatterns
+    request_method = StringField(default=None)
+
+    # args - dictionary for storing args
+    args = DictField(default=None)
+
+    # response
+    response_body = StringField(default=None)
+    response_headers = StringField(default=None)
+    response_status = IntField(default=None)
+    # delayPolicy
+    delay_policy = DynamicField(default=None)
+
+    module = DynamicField(default=None)
+
+    meta = {
+        'indexes': [
+            {'fields': ['scenario', 'contains_matchers']}
+        ],
+        'ordering': ['+recorded']
+    }
+
+    def __unicode__(self):
+        return self.scenario
+
+    def space_used(self):
+        return self.__len__()
+
+    def number_of_matchers(self):
+        return len(self.matchers or [])
+
+    def host(self):
+        try:
+            return self.scenario.split(':')[0]
+        except Exception as e:
+            log.debug(e)
+            return None
+
+
+
 class ScenarioStub(Document):
     scenario = StringField(required=True)
     stub = DynamicField()
