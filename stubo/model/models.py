@@ -190,6 +190,18 @@ class ScenarioStub(Document):
     def __unicode__(self):
         return self.scenario or u''
 
+    def response_body(self):
+        """
+        Gets Stub's response body
+        :return: Body string or None if it doesn't exist
+        """
+        try:
+            return dict(self.stub.items())['response']['body']
+        except Exception as e:
+            log.warn("Couldn't get body for stub witch matcher: %s. Error: %s" % (self.matcher, e))
+            return None
+
+
 
 class PreScenarioStub(Document):
     scenario = StringField(required=True)
