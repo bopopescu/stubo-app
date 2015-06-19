@@ -21,6 +21,8 @@ requires = [
     'Pygments',
     'dogpile.cache',
     'matchers',
+    'PyYAML',
+    'mongoengine==0.9.0',
     # testing 
     'ming',
     'pylint',        
